@@ -49,7 +49,7 @@ export const Footer: React.FC = () => {
               <li className="flex items-center space-x-2">
                 <Mail className="w-4 h-4" />
                 <a href="mailto:contact@aistudentcounseling.com" className="text-sm hover:text-white transition-colors">
-                  contact@aistudentcounseling.com
+                  contact@gouthamchotu09@gmail.com
                 </a>
               </li>
               <li className="flex items-center space-x-2">
@@ -62,7 +62,7 @@ export const Footer: React.FC = () => {
                 <MapPin className="w-4 h-4" />
                 <span className="text-sm">
                   Sphoorthy Engineering College<br />
-                  Hyderabad City, pin 506201
+                  Hyderabad City, pin 501510
                 </span>
               </li>
             </ul>
