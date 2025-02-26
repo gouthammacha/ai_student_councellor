@@ -55,14 +55,14 @@ export const Footer: React.FC = () => {
               <li className="flex items-center space-x-2">
                 <Phone className="w-4 h-4" />
                 <a href="tel:+1234567890" className="text-sm hover:text-white transition-colors">
-                  (123) 456-7890
+                  (+91) 6309-698-607
                 </a>
               </li>
               <li className="flex items-center space-x-2">
                 <MapPin className="w-4 h-4" />
                 <span className="text-sm">
-                  123 Education Street<br />
-                  Learning City, LC 12345
+                  Sphoorthy Engineering College<br />
+                  Hyderabad City, pin 506201
                 </span>
               </li>
             </ul>
@@ -89,7 +89,7 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="mt-8 pt-8 border-t border-gray-800 text-sm text-center">
-          <p>&copy; {new Date().getFullYear()} AI Student Counseling. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} AI Student Counseling. All rights reserved.<br/>Developed by @MachaGoutham</p>
         </div>
       </div>
     </footer>
