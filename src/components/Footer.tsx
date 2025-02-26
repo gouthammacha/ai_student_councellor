@@ -78,7 +78,7 @@ export const Footer: React.FC = () => {
               <a href="#" className="hover:text-white transition-colors">
                 <Twitter className="w-5 h-5" />
               </a>
-              <a href="#" className="hover:text-white transition-colors">
+              <a href="https://www.linkedin.com/in/macha-goutham-314178229" className="hover:text-white transition-colors">
                 <LinkedIn className="w-5 h-5" />
               </a>
               <a href="#" className="hover:text-white transition-colors">
