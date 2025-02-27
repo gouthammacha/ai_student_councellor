@@ -13,6 +13,7 @@ interface AssessmentStore {
   resetAssessment: () => void;
   canProceed: () => boolean;
   setError: (error: string | null) => void;
+  setCurrentQuestion: (index: number) => void;
 }
 
 export const useAssessmentStore = create<AssessmentStore>()(
@@ -80,6 +81,7 @@ export const useAssessmentStore = create<AssessmentStore>()(
         return !!currentResponse?.answer;
       },
       setError: (error) => set({ error }),
+      setCurrentQuestion: (index) => set({ currentQuestion: index }),
     }),
     {
       name: 'assessment-store',

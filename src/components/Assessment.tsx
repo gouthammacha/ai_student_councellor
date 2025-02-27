@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AssessmentQuestion } from './AssessmentQuestion';
 import { AssessmentProgress } from './AssessmentProgress';
 import { Chatbot } from './Chatbot';
@@ -6,13 +6,19 @@ import { useAssessmentStore } from '../store/useStore';
 import { questions } from '../data/questions';
 import { ChevronLeft, ChevronRight, Loader2, Brain, Trophy, Lightbulb, ArrowUp, User, BookOpen, Award } from 'lucide-react';
 import { analyzeResponses, AnalysisResult } from '../services/cohereService';
-
+// import { useAuthStore } from '../store/useAuthStore';
 
 export const Assessment: React.FC = () => {
-  const { currentQuestion, nextQuestion, previousQuestion, responses } = useAssessmentStore();
+  const { currentQuestion, nextQuestion, previousQuestion, responses, resetAssessment, setCurrentQuestion } = useAssessmentStore();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
- 
+  // const { user } = useAuthStore();
+
+  // Clear responses when the component mounts (page refresh)
+  useEffect(() => {
+    resetAssessment();
+  }, [resetAssessment]);
+
   const validateCGPA = () => {
     if (currentQuestion === 2) { // CGPA question (index 2 for question id 3)
       const cgpaResponse = responses.find(r => r.questionId === 3);
@@ -56,6 +62,14 @@ export const Assessment: React.FC = () => {
     }
   };
 
+  const handleStartNewAssessment = () => {
+    // Confirm with the user before starting a new assessment
+    if (window.confirm('Are you sure you want to start a new assessment? All your current responses will be cleared.')) {
+      resetAssessment();
+      setAnalysis(null);
+    }
+  };
+
   const getStudentInfo = () => {
     const nameResponse = responses.find(r => r.questionId === 1);
     const backlogsResponse = responses.find(r => r.questionId === 2);
@@ -68,11 +82,50 @@ export const Assessment: React.FC = () => {
     };
   };
 
+  const handleQuestionClick = (index: number) => {
+    // If the question has been answered or is the next unanswered question, allow navigation
+    const questionId = questions[index].id;
+    const isAnswered = responses.some(r => r.questionId === questionId);
+    const isNextUnanswered = index === 0 || responses.some(r => r.questionId === questions[index - 1].id);
+    
+    if (isAnswered || isNextUnanswered) {
+      setCurrentQuestion(index);
+    } else {
+      alert('Please answer the previous questions first.');
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
       {!analysis ? (
         <>
           <AssessmentProgress />
+          
+          {/* Question Navigation */}
+          <div className="w-full max-w-2xl mx-auto mb-6">
+            <div className="flex flex-wrap gap-2 justify-center">
+              {questions.map((q, index) => {
+                const isAnswered = responses.some(r => r.questionId === q.id);
+                const isCurrent = currentQuestion === index;
+                
+                return (
+                  <button
+                    key={q.id}
+                    onClick={() => handleQuestionClick(index)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
+                      ${isCurrent 
+                        ? 'bg-blue-600 text-white' 
+                        : isAnswered 
+                          ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' 
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    {q.id}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
           <AssessmentQuestion question={questions[currentQuestion]} />
 
           <div className="flex justify-between mt-8 max-w-2xl mx-auto">
@@ -209,7 +262,7 @@ export const Assessment: React.FC = () => {
 
               <div className="mt-8 text-center">
                 <button
-                  onClick={() => setAnalysis(null)}
+                  onClick={handleStartNewAssessment}
                   className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 font-medium text-lg shadow-md hover:shadow-lg"
                 >
                   Start New Assessment

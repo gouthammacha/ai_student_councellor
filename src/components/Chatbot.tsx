@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, MessageCircle, X } from 'lucide-react';
 import { AnalysisResult } from '../services/cohereService';
+import { useAssessmentStore } from '../store/useStore';
+import { questions } from '../data/questions';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -10,6 +12,19 @@ interface Message {
 
 interface ChatbotProps {
   analysis: AnalysisResult;
+}
+
+interface UserResponseData {
+  questionId: number;
+  answer: string;
+  answerText: string;
+}
+
+interface UserAssessmentData {
+  [key: string]: UserResponseData | string;
+  name: string;
+  backlogs: string;
+  cgpa: string;
 }
 
 const RATE_LIMIT_DELAY = 1000; // 1 second between messages
@@ -26,6 +41,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ analysis }) => {
   const [error, setError] = useState<string | null>(null);
   const lastMessageTime = useRef<number>(Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { responses } = useAssessmentStore();
 
   useEffect(() => {
     // Scroll to bottom when new messages arrive
@@ -53,6 +69,45 @@ export const Chatbot: React.FC<ChatbotProps> = ({ analysis }) => {
       console.error('Failed to save messages:', error);
     }
   }, [messages]);
+
+  // Get user assessment data for personalized responses
+  const getUserAssessmentData = (): UserAssessmentData => {
+    const userData: UserAssessmentData = {
+      name: '',
+      backlogs: '0',
+      cgpa: '0'
+    };
+    
+    // Extract all responses with their question text
+    responses.forEach(response => {
+      const question = questions.find(q => q.id === response.questionId);
+      if (question) {
+        let answerText = response.answer;
+        
+        // For multiple choice questions, get the text of the selected option
+        if (question.type === 'multiple-choice' && question.options) {
+          answerText = question.options[response.answer as keyof typeof question.options] || response.answer;
+        }
+        
+        userData[question.text] = {
+          questionId: question.id,
+          answer: response.answer,
+          answerText: answerText
+        };
+      }
+    });
+    
+    // Add specific fields for common queries
+    const nameResponse = responses.find(r => r.questionId === 1);
+    const backlogsResponse = responses.find(r => r.questionId === 2);
+    const cgpaResponse = responses.find(r => r.questionId === 3);
+    
+    userData.name = nameResponse?.answer.toString() || '';
+    userData.backlogs = backlogsResponse?.answer.toString() || '0';
+    userData.cgpa = cgpaResponse?.answer.toString() || '0';
+    
+    return userData;
+  };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +144,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ analysis }) => {
           'Cohere-Version': '2022-12-06'
         },
         body: JSON.stringify({
-          prompt: createChatPrompt(analysis, messages, userMessage),
+          prompt: createChatPrompt(analysis, messages, userMessage, getUserAssessmentData()),
           model: 'command',
           max_tokens: 300,
           temperature: 0.7,
@@ -205,9 +260,27 @@ export const Chatbot: React.FC<ChatbotProps> = ({ analysis }) => {
 function createChatPrompt(
   analysis: AnalysisResult,
   messages: Message[],
-  newMessage: string
+  newMessage: string,
+  userData: UserAssessmentData
 ): string {
-  return `You are an AI academic counselor helping a student understand their assessment results. Here are the student's assessment results:
+  // Format user data for the prompt
+  const userDataString = Object.entries(userData)
+    .filter(([key]) => !['name', 'backlogs', 'cgpa'].includes(key)) // Filter out the special fields we handle separately
+    .map(([question, data]) => {
+      if (typeof data === 'object') {
+        const answer = data.answerText || data.answer;
+        return `Question: ${question}\nAnswer: ${answer}`;
+      }
+      return '';
+    })
+    .filter(entry => entry !== '')
+    .join('\n\n');
+
+  return `You are an AI academic counselor helping a student understand their assessment results. Here are the student's assessment results and personal information:
+
+Student Name: ${userData.name}
+CGPA: ${userData.cgpa}
+Active Backlogs: ${userData.backlogs}
 
 Learning Persona: ${analysis.learningPersona}
 
@@ -220,12 +293,15 @@ ${analysis.areasForImprovement.map(a => `- ${a}`).join('\n')}
 Recommendations:
 ${analysis.recommendations.map(r => `- ${r}`).join('\n')}
 
+Detailed Assessment Responses:
+${userDataString}
+
 Previous conversation:
 ${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}
 
 USER: ${newMessage}
 
-Provide a helpful, concise response based on the assessment results. Focus on giving practical advice and explanations that relate to the student's specific situation.
+Provide a helpful, personalized response based on the assessment results and the student's specific information. If the student asks about their CGPA, backlogs, strengths, areas for improvement, or any other aspect of their assessment, provide the exact information from their results. Be encouraging and supportive while giving practical advice that relates to their specific situation and responses should be shorter and easy to understand.
 
 A:`;
 }
