@@ -4,15 +4,33 @@ import { AssessmentProgress } from './AssessmentProgress';
 import { Chatbot } from './Chatbot';
 import { useAssessmentStore } from '../store/useStore';
 import { questions } from '../data/questions';
-import { ChevronLeft, ChevronRight, Loader2, Brain, Trophy, Lightbulb, ArrowUp, User, BookOpen, Award } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Brain, Trophy, Lightbulb, ArrowUp, User, BookOpen, Award, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { analyzeResponses, AnalysisResult } from '../services/cohereService';
-// import { useAuthStore } from '../store/useAuthStore';
+import { useAuthStore } from '../store/useAuthStore';
+import { saveAssessmentAttempt, getAssessmentAttempts, AssessmentAttempt } from '../services/assessmentService';
+import { format } from 'date-fns';
 
 export const Assessment: React.FC = () => {
   const { currentQuestion, nextQuestion, previousQuestion, responses, resetAssessment, setCurrentQuestion } = useAssessmentStore();
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  // const { user } = useAuthStore();
+  const [previousAttempts, setPreviousAttempts] = useState<AssessmentAttempt[]>([]);
+  const [showAttempts, setShowAttempts] = useState(false);
+  const [expandedAttempt, setExpandedAttempt] = useState<string | null>(null);
+  const { user } = useAuthStore();
+
+  // Load previous attempts
+  useEffect(() => {
+    const loadAttempts = async () => {
+      const { data, error } = await getAssessmentAttempts();
+      if (!error && data) {
+        setPreviousAttempts(data);
+      }
+    };
+    if (user) {
+      loadAttempts();
+    }
+  }, [user]);
 
   // Clear responses when the component mounts (page refresh)
   useEffect(() => {
@@ -20,7 +38,7 @@ export const Assessment: React.FC = () => {
   }, [resetAssessment]);
 
   const validateCGPA = () => {
-    if (currentQuestion === 2) { // CGPA question (index 2 for question id 3)
+    if (currentQuestion === 2) {
       const cgpaResponse = responses.find(r => r.questionId === 3);
       if (cgpaResponse) {
         const cgpa = parseFloat(cgpaResponse.answer as string);
@@ -54,6 +72,20 @@ export const Assessment: React.FC = () => {
     try {
       const result = await analyzeResponses(responses);
       setAnalysis(result);
+      
+      // Save the assessment attempt
+      if (user) {
+        const { error } = await saveAssessmentAttempt(responses, result);
+        if (error) {
+          console.error('Failed to save assessment attempt:', error);
+        } else {
+          // Refresh the attempts list
+          const { data } = await getAssessmentAttempts();
+          if (data) {
+            setPreviousAttempts(data);
+          }
+        }
+      }
     } catch (error) {
       console.error('Analysis failed:', error);
       alert('Failed to analyze responses. Please try again.');
@@ -63,7 +95,6 @@ export const Assessment: React.FC = () => {
   };
 
   const handleStartNewAssessment = () => {
-    // Confirm with the user before starting a new assessment
     if (window.confirm('Are you sure you want to start a new assessment? All your current responses will be cleared.')) {
       resetAssessment();
       setAnalysis(null);
@@ -83,7 +114,6 @@ export const Assessment: React.FC = () => {
   };
 
   const handleQuestionClick = (index: number) => {
-    // If the question has been answered or is the next unanswered question, allow navigation
     const questionId = questions[index].id;
     const isAnswered = responses.some(r => r.questionId === questionId);
     const isNextUnanswered = index === 0 || responses.some(r => r.questionId === questions[index - 1].id);
@@ -95,13 +125,109 @@ export const Assessment: React.FC = () => {
     }
   };
 
+  const toggleAttemptExpansion = (attemptId: string) => {
+    setExpandedAttempt(expandedAttempt === attemptId ? null : attemptId);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
       {!analysis ? (
         <>
-          <AssessmentProgress />
+          <div className="flex justify-between items-center mb-6">
+            <AssessmentProgress />
+            {previousAttempts.length > 0 && (
+              <button
+                onClick={() => setShowAttempts(!showAttempts)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                <History className="w-4 h-4" />
+                Previous Attempts ({previousAttempts.length})
+              </button>
+            )}
+          </div>
+
+          {showAttempts && (
+            <div className="mb-8 bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Previous Assessment History</h3>
+              <div className="space-y-4">
+                {previousAttempts.map((attempt, index) => (
+                  <div key={attempt.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">
+                          Attempt #{previousAttempts.length - index}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {format(new Date(attempt.created_at), 'PPpp')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => toggleAttemptExpansion(attempt.id)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {expandedAttempt === attempt.id ? (
+                          <ChevronUp className="w-5 h-5" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-2 rounded">
+                        <span className="text-sm text-gray-600">CGPA:</span>
+                        <span className="ml-2 font-medium">
+                          {attempt.responses.find(r => r.questionId === 3)?.answer || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="bg-gray-50 p-2 rounded">
+                        <span className="text-sm text-gray-600">Backlogs:</span>
+                        <span className="ml-2 font-medium">
+                          {attempt.responses.find(r => r.questionId === 2)?.answer || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {expandedAttempt === attempt.id && (
+                      <div className="mt-4 space-y-6">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="font-semibold text-blue-900 mb-2">Learning Profile</h4>
+                          <p className="text-blue-800">{attempt.analysis.learningPersona}</p>
+                        </div>
+                        
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <h4 className="font-semibold text-green-900 mb-2">Strengths</h4>
+                          <ul className="list-disc list-inside space-y-2">
+                            {attempt.analysis.strengths.map((strength, idx) => (
+                              <li key={idx} className="text-green-800">{strength}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        
+                        <div className="bg-orange-50 p-4 rounded-lg">
+                          <h4 className="font-semibold text-orange-900 mb-2">Areas for Improvement</h4>
+                          <ul className="list-disc list-inside space-y-2">
+                            {attempt.analysis.areasForImprovement.map((area, idx) => (
+                              <li key={idx} className="text-orange-800">{area}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        
+                        <div className="bg-purple-50 p-4 rounded-lg">
+                          <h4 className="font-semibold text-purple-900 mb-2">Recommendations</h4>
+                          <ul className="list-disc list-inside space-y-2">
+                            {attempt.analysis.recommendations.map((rec, idx) => (
+                              <li key={idx} className="text-purple-800">{rec}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
-          {/* Question Navigation */}
           <div className="w-full max-w-2xl mx-auto mb-6">
             <div className="flex flex-wrap gap-2 justify-center">
               {questions.map((q, index) => {
@@ -169,10 +295,21 @@ export const Assessment: React.FC = () => {
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             {/* Student Info Section */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 text-white">
-              <h2 className="text-2xl font-bold mb-6 flex items-center">
-                <User className="w-6 h-6 mr-3" />
-                Student Information
-              </h2>
+              <div className="flex justify-between items-start">
+                <h2 className="text-2xl font-bold mb-6 flex items-center">
+                  <User className="w-6 h-6 mr-3" />
+                  Student Information
+                </h2>
+                {previousAttempts.length > 0 && (
+                  <button
+                    onClick={() => setShowAttempts(!showAttempts)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-400"
+                  >
+                    <History className="w-4 h-4" />
+                    View Previous Attempts ({previousAttempts.length})
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
                   <div className="flex items-center mb-2">
@@ -197,6 +334,88 @@ export const Assessment: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {showAttempts && (
+              <div className="p-6 bg-gray-50 border-b">
+                <h3 className="text-lg font-semibold mb-4">Previous Assessment History</h3>
+                <div className="space-y-4">
+                  {previousAttempts.map((attempt, index) => (
+                    <div key={attempt.id} className="bg-white p-4 rounded-lg shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">
+                            Attempt #{previousAttempts.length - index}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {format(new Date(attempt.created_at), 'PPpp')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => toggleAttemptExpansion(attempt.id)}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          {expandedAttempt === attempt.id ? (
+                            <ChevronUp className="w-5 h-5" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-2 rounded">
+                          <span className="text-sm text-gray-600">CGPA:</span>
+                          <span className="ml-2 font-medium">
+                            {attempt.responses.find(r => r.questionId === 3)?.answer || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded">
+                          <span className="text-sm text-gray-600">Backlogs:</span>
+                          <span className="ml-2 font-medium">
+                            {attempt.responses.find(r => r.questionId === 2)?.answer || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {expandedAttempt === attempt.id && (
+                        <div className="mt-4 space-y-4">
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <h4 className="font-semibold text-blue-900 mb-2">Learning Profile</h4>
+                            <p className="text-blue-800">{attempt.analysis.learningPersona}</p>
+                          </div>
+                          
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <h4 className="font-semibold text-green-900 mb-2">Strengths</h4>
+                            <ul className="list-disc list-inside space-y-2">
+                              {attempt.analysis.strengths.map((strength, idx) => (
+                                <li key={idx} className="text-green-800">{strength}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          
+                          <div className="bg-orange-50 p-4 rounded-lg">
+                            <h4 className="font-semibold text-orange-900 mb-2">Areas for Improvement</h4>
+                            <ul className="list-disc list-inside space-y-2">
+                              {attempt.analysis.areasForImprovement.map((area, idx) => (
+                                <li key={idx} className="text-orange-800">{area}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          
+                          <div className="bg-purple-50 p-4 rounded-lg">
+                            <h4 className="font-semibold text-purple-900 mb-2">Recommendations</h4>
+                            <ul className="list-disc list-inside space-y-2">
+                              {attempt.analysis.recommendations.map((rec, idx) => (
+                                <li key={idx} className="text-purple-800">{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-10 text-white">
               <h2 className="text-3xl font-bold mb-6 flex items-center">
